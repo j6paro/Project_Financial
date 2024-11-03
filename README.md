@@ -8,12 +8,21 @@ The topic of this projects is financial. It's about financial indicators scrappi
 \- 1차 목표는 수동으로 실행시키는 코드의 완성, 2차 목표는 클라우드를 활용해 배치 프로세스로 일정 주기마다 자동으로 종목의 지표들을 받아올 수 있도록 한다.
 
 # 2. 코드
+
+## 1) 전체적인 흐름
+
+\- (1) NYSE에서 나스닥에 상장된 전 종목 리스트 스크랩 -> (2) 각 종목에 대해 야후 파이낸스에서 PER, PBR 등 투자 기본 지표들 받아오기 -> (3) 각 지표들에 기준을 두고 저PER, 저PBR 종목 등 선별하기  
+\= 각 단계에서 사용된 주요 패키지, 라이브러리는 다음과 같다.  
+\- (1) : selenium  
+\- (2) : yfinance  
+\= (3) : pandas, openpyxl  
+
 ```
+# 전 종목 스크래핑으로
 import yfinance as yf
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-import requests
 from datetime import datetime
 import time
 from openpyxl import Workbook
@@ -21,31 +30,38 @@ from openpyxl import load_workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 import threading
 import os
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import chromedriver_autoinstaller
 
 start_time = time.time()  # 시작 시간
 # num_cpu = os.cpu_count()  # 일 나눠서할 cpu 개수
 num_cpu = 6
 
-# 오늘 날짜 가져오기
-now = datetime.now()
+# 날짜 관련
+now = datetime.now()  # 오늘 날짜 가져오기
 today = (
     str(now.year)[2:] + "0" + str(now.month) + str(now.day)
 )  # 간소화한 날짜 ex) 241027 (2024년 10월 27일)
 today2 = str(now).split()[0]  # 긴 형식의 날짜 ex) 2024-10-27 (2024년 10월 27일)
+MONTH_FOR_NYSE = 11  # 매번 NYSE에서 전종목 긁어오는 건 시간이 너무 오래 걸림. 특정 월에만 긁어오게 하자.
 
-# 미국 주식들 시가총액에 따른 순위 엑셀 다운로드
-url = "https://companiesmarketcap.com/usa/largest-companies-in-the-usa-by-market-cap/?download=csv"  # 다운로드받을 csv 파일 주소
+# NYSE에서 나스닥 상장 전 종목 가져오기
+URL_NYSE = "https://www.nyse.com/listings_directory/stock"  # NYSE 주소
 filename = "us_stocks.csv"  # 넷상에서 다운받은 주식 목록 파일명
 filename_save = "stocks_basic_indicators.xlsx"  # 완성된 데이터프레임을 저장할 파일
+cnt_page = 1  # 현재 몇 페이지 스크래핑 중인지 표시
 
 # User-Agent 설정
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"  # User-Agent 설정. 스팸봇으로 오해하지 않도록
 header = {"User-Agent": user_agent}  # 요청 헤더 설정
 
 # 파일 저장 경로 설정
-DIR_STOCK_US = (
-    "C:/coding/DA/재테크/미국기업목록/" + filename
-)  # 인터넷상에서 기업목록 다운받기
+DIR_NYSE_STOCK_LIST = (
+    "C:/coding/DA/재테크/미국기업목록/nyse_stocks.csv"  # 인터넷상에서 기업목록 다운받기
+)
 DIR_STOCK_INDICATOR = (
     "C:/coding/DA/재테크/" + filename_save
 )  # 작업 후 다 만들어진 파일 저장할 경로
@@ -57,7 +73,7 @@ lock = threading.Lock()
 ### 모듈0. 함수 모음
 # 각 주식 지표 데이터 가져오기
 def add_stock_info(data):
-    global df_stocks
+    global df_stocks_nyse
     data_reset = data.reset_index(drop=True)
     for i in tqdm(range(len(data_reset))):  # 2024/04/10(수) 추가
         # yfinance를 사용하여 주식 데이터를 가져오기
@@ -143,8 +159,8 @@ def add_stock_info(data):
     lock.release()
 
     if len(result_dataframes) == num_cpu:
-        df_stocks = df_stocks.reset_index(drop=True)
-        df_stocks = pd.concat(result_dataframes, ignore_index=True)
+        df_stocks_nyse = df_stocks_nyse.reset_index(drop=True)
+        df_stocks_nyse = pd.concat(result_dataframes, ignore_index=True)
     """
 
 
@@ -159,9 +175,6 @@ def edit_excel(dataframe, file_exist):
         stock_ws.append(r)
     stock_wb.save(DIR_STOCK_INDICATOR)
     stock_wb.close()
-
-    # 엑셀 파일 비어있는 행 삭제
-    # delete_empty_rows()
 
 
 def make_or_edit_excel(dataframe):
@@ -186,27 +199,81 @@ def delete_empty_rows():
 
 
 if __name__ == "__main__":
-    ### 모듈1. 미국기업 시가총액순 엑셀 다운로드 받기
-    try:
-        response = requests.get(url, headers=header)
-        response.raise_for_status()
+    if now.month % 2 == 0:  # 두 달에 한 번씩 종목 리스트 업데이트. 디버깅용 now.month == MONTH_FOR_NYSE:
+        ### 모듈1. NYSE에서 나스닥 상장 전 종목 리스트 받아오기
+        # 크롬 드라이버 최신버전으로 업데이트
+        chromedriver_autoinstaller.install()
+        options = webdriver.ChromeOptions()
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        options.add_argument("--headless")  # 백그라운드 모드 추가
+        options.add_argument(
+            "--no-sandbox"
+        )  # 리소스 제한이 있는 환경에서 사용할 때 유용
+        options.add_argument("--disable-dev-shm-usage")  # 메모리 관련 오류 방지
 
-        # 파일 저장
-        with open(DIR_STOCK_US, "wb") as f:
-            f.write(response.content)
-            print("기업 목록 다운로드 완료")
+        # 웹드라이버 시작
+        driver = webdriver.Chrome(options=options)
+        driver.get(URL_NYSE)
 
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP Error 발생: {e}")
+        # 빈 데이터프레임 생성
+        columns = ["Symbol", "Name"]
+        df_nyse = pd.DataFrame(columns=columns)
 
-    except Exception as e:
-        print(f"다운로드 중 오류 발생: {e}")
+        print("나스닥 상장 종목 수집 중")
+        # 페이지 넘기면서 기업 정보 수집
+        try:
+            while True:
+                # 테이블 로드 대기
+                if cnt_page % 50 == 0:
+                    print(f"현재 수집 중인 페이지 : {cnt_page}")
+                WebDriverWait(driver, 3).until(
+                    EC.presence_of_element_located(
+                        (
+                            By.XPATH,
+                            '//*[@id="integration-id-fcc63aa"]/div[1]/div[3]/div[2]/div[2]/div[1]/table/tbody',
+                        )
+                    )
+                )
+
+                # 테이블 정보 가져오기
+                rows = driver.find_elements(
+                    By.XPATH,
+                    '//*[@id="integration-id-fcc63aa"]/div[1]/div[3]/div[2]/div[2]/div[1]/table/tbody/tr',
+                )  # 첫 번째 줄
+                # 각 행에서 심볼과 기업명 추출
+                for row in rows:
+                    symbol = row.find_element(By.XPATH, "./td[1]").text
+                    name = row.find_element(By.XPATH, "./td[2]").text
+                    df_concat = pd.DataFrame([{"Symbol": symbol, "Name": name}])
+                    df_nyse = pd.concat([df_nyse, df_concat], ignore_index=True)
+
+                # 다음 버튼 클릭 대기 및 클릭
+                next_btn = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable(
+                        (
+                            By.XPATH,
+                            '//*[@id="integration-id-fcc63aa"]/div[1]/div[3]/div[2]/div[2]/div[2]/div/ul/li[8]/a/span',
+                        )
+                    )
+                )
+                next_btn.click()
+                cnt_page += 1
+                # time.sleep(2)  # 페이지가 로드될 시간을 줌
+
+        except Exception as e:
+            print(f"에러 발생: {e}")
+
+        finally:
+            # 크롤링 종료 후 데이터 저장
+            driver.quit()
+            df_nyse.to_csv(DIR_NYSE_STOCK_LIST, index=False)
+            print("나스닥 종목 저장 완료: nyse_stocks.csv")
 
     ### 모듈2. 엑셀/csv 파일 읽어서 DataFrame에 저장하고 빈 컬럼들 생성
-    df_stocks = pd.read_csv(
-        DIR_STOCK_US
+    df_stocks_nyse = pd.read_csv(
+        DIR_NYSE_STOCK_LIST
     )  # 시가총액순 기업들을 df_stocks라는 이름의 DataFrame에 저장
-    df_stocks = df_stocks.assign(
+    df_stocks_nyse = df_stocks_nyse.assign(
         DATE=today2,
         PER=0,
         PBR=0,
@@ -228,7 +295,7 @@ if __name__ == "__main__":
 
     ### 모듈3. 기업들 PER, PBR, ROE, EPS, 영업이익 가져오기
 
-    ranges = np.array_split(np.array(list(df_stocks.index)), num_cpu)
+    ranges = np.array_split(np.array(list(df_stocks_nyse.index)), num_cpu)
     result_dataframes = (
         []
     )  # 미국주식 목록 데이터프레임 쪼갠 뒤, add_stock_info 함수를 거친 데이터프레임들을 다시 합쳐주기 위해 한 리스트에 모을거임.
@@ -236,7 +303,7 @@ if __name__ == "__main__":
     df_stocks_for_thread = []  # 미국주식 목록 데이터프레임 쪼개서 담을 리스트
 
     for c in range(1, num_cpu + 1):
-        globals()[f"df_stocks_split{c}"] = df_stocks.loc[
+        globals()[f"df_stocks_split{c}"] = df_stocks_nyse.loc[
             ranges[c - 1][0] : ranges[c - 1][-1] + 1
         ]
         df_stocks_for_thread.append(eval(f"df_stocks_split{c}"))
@@ -262,5 +329,18 @@ if __name__ == "__main__":
     print("저장이 완료되었습니다.")
 
     # 실행시간 체크
-    print("실행시간 : " + str(time.time() - start_time)[:5] + "초")
+    runningtime = int(time.time() - start_time)  # 현재 시간 - 시작 시간
+    runningtime_hour = runningtime // 3600  # 시간
+    runningtime -= runningtime_hour * 3600
+    runningtime_minute = runningtime // 60  # 분
+    runningtime -= runningtime_minute * 60
+    runningtime_second = runningtime  # 초
+    print(f"실행시간 {runningtime_hour}:{runningtime_minute}:{runningtime_second}")
 ```
+
+# 3. 피드백
+
+## 1. 추가할 것들
+
+### 1) 241103_NYSE에서 나스닥 상장 전 종목 받아오기
+\= 지금은 다음 종목들이 있는 페이지로 넘길 때 WebDriverWait(driver, 3) 이렇게 일정 시간 대기하라고 하고 있다. 하지만 [이 블로그](https://june98.tistory.com/11)에서는 일정 시간을 정한 게 아닌, 해당 요소가 화면에 표시될 때까지 대기하는 것도 가능하다.
