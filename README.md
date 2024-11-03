@@ -12,7 +12,7 @@ The topic of this projects is financial. It's about financial indicators scrappi
 ## 1) 전체적인 흐름
 
 \- (1) NYSE에서 나스닥에 상장된 전 종목 리스트 스크랩 -> (2) 각 종목에 대해 야후 파이낸스에서 PER, PBR 등 투자 기본 지표들 받아오기 -> (3) 각 지표들에 기준을 두고 저PER, 저PBR 종목 등 선별하기  
-\= 각 단계에서 사용된 주요 패키지, 라이브러리는 다음과 같다.  
+\- 각 단계에서 사용된 주요 패키지, 라이브러리는 다음과 같다.  
 \- (1) : selenium  
 \- (2) : yfinance  
 \- (3) : pandas, openpyxl  
