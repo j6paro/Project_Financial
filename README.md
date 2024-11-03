@@ -15,7 +15,7 @@ The topic of this projects is financial. It's about financial indicators scrappi
 \= 각 단계에서 사용된 주요 패키지, 라이브러리는 다음과 같다.  
 \- (1) : selenium  
 \- (2) : yfinance  
-\= (3) : pandas, openpyxl  
+\- (3) : pandas, openpyxl  
 
 ```
 # 전 종목 스크래핑으로
