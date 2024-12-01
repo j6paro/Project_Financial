@@ -92,9 +92,9 @@ for symbol in symbols:
 
 ## 4-1. 순번 / 에러명 / 원인 / 해결  
 
-### 1. / client 404에러 / yfinance stock.info 조회 시 안 뜨는 티커들 존재 / stock.info 전에 try except 예외처리. 사실, 그냥 add_stock_info 함수 내에서 반복문 시작하자마자 예외처리 조졌으면 다 잘 해결됐을 거임  
-### 2. / json.decoder.JSONDecodeError / 1번과 같음 / 1번과 같음  
-### 3. / AttributeError: 'float' object has no attribute 'upper' / stock_data = yf.Ticker(symbol) 부분에서 뜨는 오류. Symbol중에서 float인 게 하나도 없는데 왜 뜨는지는 모르겠음 / stock_data = yf.Ticker(symbol) 전에 try except 예외처리  
-### 4. / Thread Exception / 2번이나 다른 이유로 쓰레드 작업 비정상 종료 시 발생 / 예외처리 적절하게 해줘서 1, 2 등 오류 안 뜨면 해결  
-### 5. / ValueError: No objects to concatenate / Thread들이 비정상 종료되어 합칠 데이터프레임들이 하나도 없어서 발생 / 1개 쓰레드라도 작업 완료하면 안 뜸. 3을 해결하면 되고, 이를 위해 1, 2번 해결 필요  
-### 6. / 완성된 엑셀에 일부 종목들 누락 / Thread간 속도 차이? 일부 쓰레드 작업 완료 안 됐는데 프로그램 종료 / 불완전 해결. 1~4번 에러들을 해결하려다보니 241119 성공. 아마 1번 에러가 지대한 영향을 끼친 게 아닐까? try except 예외처리 위치로 해결했다고 봐야할듯  
+\- 1. / client 404에러 / yfinance stock.info 조회 시 안 뜨는 티커들 존재 / stock.info 전에 try except 예외처리. 사실, 그냥 add_stock_info 함수 내에서 반복문 시작하자마자 예외처리 조졌으면 다 잘 해결됐을 거임  
+\- 2. / json.decoder.JSONDecodeError / 1번과 같음 / 1번과 같음  
+\- 3. / AttributeError: 'float' object has no attribute 'upper' / stock_data = yf.Ticker(symbol) 부분에서 뜨는 오류. Symbol중에서 float인 게 하나도 없는데 왜 뜨는지는 모르겠음 / stock_data = yf.Ticker(symbol) 전에 try except 예외처리  
+\- 4. / Thread Exception / 2번이나 다른 이유로 쓰레드 작업 비정상 종료 시 발생 / 예외처리 적절하게 해줘서 1, 2 등 오류 안 뜨면 해결  
+\- 5. / ValueError: No objects to concatenate / Thread들이 비정상 종료되어 합칠 데이터프레임들이 하나도 없어서 발생 / 1개 쓰레드라도 작업 완료하면 안 뜸. 3을 해결하면 되고, 이를 위해 1, 2번 해결 필요  
+\- 6. / 완성된 엑셀에 일부 종목들 누락 / Thread간 속도 차이? 일부 쓰레드 작업 완료 안 됐는데 프로그램 종료 / 불완전 해결. 1~4번 에러들을 해결하려다보니 241119 성공. 아마 1번 에러가 지대한 영향을 끼친 게 아닐까? try except 예외처리 위치로 해결했다고 봐야할듯  
