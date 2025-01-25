@@ -112,7 +112,7 @@ def add_stock_info(data):
                 data_reset.loc[i, "평가충족"] += 1
             if (
                 data_reset.loc[i, "OIIR"] >= 1.10
-            ):  # 영업이익 대폭 증가 주식 판별. 영업이익 5% 상승 기준
+            ):  # 영업이익 대폭 증가 주식 판별. 영업이익 10% 상승 기준
                 data_reset.loc[i, "HROI"] = True
                 data_reset.loc[i, "평가충족"] += 1
         if (
