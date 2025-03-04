@@ -19,7 +19,15 @@
 (1) 배당금 이력 조회하고 싶은 티커 입력 (대, 소문자 상관 없음)  
 (2) 티커 입력 후 검색 버튼 클릭  
 (3) '엑셀 파일 저장' 버튼 클릭 시 해당 종목 데이터 엑셀 파일로 저장  
-(4) '그래프 저장' 버튼 클릭 시 해당 종목 그래프 이미지 파일로 저장 
+(4) '그래프 저장' 버튼 클릭 시 해당 종목 그래프 이미지 파일로 저장  
+
+#### 3. 업데이트
+![image](https://github.com/user-attachments/assets/937c3926-baa4-479c-a125-d04434a57cbf)
+\* 250304월  
+1. 배당률 계산 방법 변경
+\- 기존 : 당해 배당금 합 / 당해 종가 평균  
+\- 변경 : 당해 배당금 합 / 당해 배당락일 종가 평균  
+2. 마지막 종가 기준 지난 1년간 배당률 계산하여 라벨로 표시
 
 # 2. 코드
 
@@ -38,75 +46,109 @@
 import yfinance as yf
 from tkinter import *
 from tkinter import filedialog
+from tkinter import font
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 import pandas as pd
+import datetime
 ```
 \- yfinance : 야후 파이낸스에서 주식 기본 지표들을 스크래핑하기 위해 import 한다. 그런데 너무 많이 스크래핑 요청을 보내다 보면 야후 파이낸스에서 이를 봇으로 감지하는지 종종 알 수 없는 이유로 스크래핑이 중간에 멈추기도 한다.  
-\- pandas : yfinance에서 수집한 배당금, 종가 데이터를 가공해 데이터프레임을 만들고 이를 저장한다.  
+\- pandas, numpy : yfinance에서 수집한 배당금, 종가 데이터를 가공해 데이터프레임을 만들고 이를 저장한다. numpy는 컬럼합 등 계산할 때 사용  
 \- matplotlib.pyplot, FigureCanvasTkAgg : 시각화에 사용, FigureCanvasTkAgg는 matplotlib로 시각화한 그래프와 tkinter의 연결에 사용  
-\- tinker, filedialog : 보기에 편하도록하려는 목적도 있고, 프로그램을 exe 파일로 배포하기 위해 GUI를 도입했다. filedialog는 그래프, 엑셀 파일 저장하는 창을 띄우는데 사용된다.  
+\- tinker, filedialog, font : 보기에 편하도록하려는 목적도 있고, 프로그램을 exe 파일로 배포하기 위해 GUI를 도입했다. filedialog는 그래프, 엑셀 파일 저장하는 창을 띄우는데 사용된다. gui 폰트 변경 위해 font도 import  
 
 ### 2-2-2. yfinance로 배당률, 배당금 수집하여 데이터프레임 생성
 ```
 df_savefile = pd.DataFrame()  # 엑셀 파일로 저장할 데이터프레임. 처음엔 아무것도 없음
 
+
 # 배당금, 배당률, 종가 받아오는 함수
 def scraping_stock_data():
     global df_savefile
 
+    ### 주식 데이터 스크래핑하고 배당금, 배당률 시각화
     ticker = str(entry_ticker.get()).upper()  # 엔트리에 입력된 특정 종목 티커 받아오기
     stock = yf.Ticker(ticker)  # 주식 데이터 다운로드
-    dividends = stock.dividends  # 역대 배당금 조회
 
-    # 종가 데이터프레임 만들기
-    df_price = stock.history(interval="1d", period="max")  # 특정 종목 정보 받아오기
-    df_price = df_price.reset_index()  # 인덱스 초기화
-    df_price["Year"] = (
-        df_price["Date"].astype("str").str.split("-").str[0]
+    # 주식 정보 데이터프레임 만들기
+    df_stockdata = stock.history(interval="1d", period="max")  # 특정 종목 정보 받아오기
+    df_stockdata = df_stockdata.reset_index()  # 인덱스 초기화
+    df_stockdata["Year"] = (
+        df_stockdata["Date"].astype("str").str.split("-").str[0]
     )  # 연도 컬럼 생성
 
-    # 종가 피벗 테이블 만들기
-    df_pivot_price = pd.pivot_table(
-        df_price, values="Close", index="Year", aggfunc="mean"
-    )  # 같은 년도의 종가 평균가
-    df_pivot_price = df_pivot_price.rename(
-        columns={"Close": str(ticker + "_closed")}
-    )  # 종가 피벗 테이블 컬럼명 바꾸기
+    # 전처리용 데이터프레임 만들기
+    df_preprocessing = df_stockdata[
+        df_stockdata.Dividends != 0
+    ]  # Dividends가 0인 행 모두 삭제
+    df_preprocessing = df_preprocessing.reset_index()  # 인덱스 초기화
+    df_preprocessing.drop(["index"], axis=1, inplace=True)
+    pd.to_datetime(df_preprocessing["Date"])  # 데이터타입 datetime으로 변경
 
-    # 배당금 데이터프레임 만들기
-    df_dividends = pd.DataFrame(dividends)  # 배당금 시리즈 -> 배당금 데이터프레임
-    df_dividends = df_dividends.reset_index()  # 인덱스 초기화 -> 날짜 컬럼(Date) 생성
-    df_dividends["Year"] = (
-        df_dividends["Date"].astype("str").str.split("-").str[0]
-    )  # 연도 컬럼 생성
     df_pivot_dividends = pd.pivot_table(
-        df_dividends, values="Dividends", index="Year", aggfunc="sum"
-    )  # 배당금 피벗 테이블 생성_연도별 배당금
+        df_preprocessing, values="Dividends", index="Year", aggfunc=np.sum
+    )  # 배당금 피벗 테이블 만들기
+    df_pivot_price = pd.pivot_table(
+        df_preprocessing, values="Close", index="Year", aggfunc=np.mean
+    )  # 종가 피벗 테이블 만들기
 
     # 종가 테이블, 배당금 테이블 join 하기
     df_merged = pd.merge(
-        left=df_pivot_price,
-        right=df_pivot_dividends,
-        left_index=True,
-        right_index=True,
-        how="inner",
+        df_pivot_dividends, df_pivot_price, on="Year", how="inner"
     )  # 인덱스로 join 하기
     df_merged["Dividends yield rate"] = round(
-        (df_merged["Dividends"] / df_merged[ticker + "_closed"]) * 100, 1
+        (df_merged["Dividends"] / df_merged["Close"]) * 100, 1
     )  # 배당률 컬럼 생성
-
-    df_savefile = df_merged  # 저장할 데이터프레임 만들어 주기
+    df_merged = df_merged.reset_index()  # 인덱스 초기화
+    df_savefile = df_stockdata  # 저장할 데이터프레임 만들어 주기
+    df_savefile["Date"] = (
+        df_savefile["Date"].astype("str").str.split("-").str[0]
+    )  # 타임존은 엑셀로 저장이 안 된다.
 
     make_graph(df_merged, ticker)
+
+    ### 현재 종가 기준 배당률 구하기
+    now = datetime.datetime.now()  # 현재 시간
+    now_transform = str(now).split()[0]  # 현재 시간을 yyyy-mm-dd 형식으로
+    date_lastclose = str(df_stockdata["Date"].iloc[-1]).split()[
+        0
+    ]  # 가장 최근 종가 날짜
+    price_last_close = df_stockdata["Close"].iloc[-1]  # 가장 최근 종가
+    date_last_dividends = str(df_preprocessing["Date"].iloc[-1])  # 마지막 배당일
+
+    if (
+        str(now).split()[0][:7] == date_last_dividends[:7]
+    ):  # 만약 이번달에 배당이 나옴 -> 배당금합 = 11개월 전~이번달 배당합
+        start_date = (
+            str(now.year - 1) + "-" + str(now.month + 1).zfill(2) + "-01"
+        )  # 시작일을 11개월 전 1일로
+        df_trailing_dividends = df_preprocessing[
+            df_preprocessing["Date"].bewteen(start_date, now_transform)
+        ]  # 최근 1년 데이터프레임
+        trailing_dividends_yield_rate = (
+            df_trailing_dividends["Dividends"].sum / price_last_close
+        ) * 100  # 최근 1년 배당률 구하기
+    else:
+        start_date = (
+            str(now.year - 1) + "-" + str(now.month).zfill(2) + "-01"
+        )  # 시작일을 11개월 전 1일로
+        df_trailing_dividends = df_preprocessing[
+            df_preprocessing["Date"].between(start_date, now_transform)
+        ]  # 최근 1년 데이터프레임
+        trailing_dividends_yield_rate = (
+            df_trailing_dividends["Dividends"].sum() / price_last_close
+        ) * 100  # 최근 1년 배당률 구하기
+    current_dividends_yield_rate.set(
+        f"마지막 종가일({date_lastclose})기준 배당률 : {round(trailing_dividends_yield_rate,1)}%"
+    )
 ```
 \- 이번에 알게된건데, 함수 내부에서 global을 사용하지 않고 전역변수로 선언한 데이터프레임에 값을 넣어줄 경우, 함수 내부에서 호출할 때는 값이 잘 나타나지만, 밖에서 호출하면 빈 데이터프레임만 보인다.  
 
 ### 2-2-3. 시각화 함수
 ```
-# 시각화 함수
 def make_graph(df, ticker):
-    for widget in frame_2.winfo_children():  # 그래프 매번 새로 그리기
+    for widget in frame_3.winfo_children():  # 그래프 매번 새로 그리기
         widget.destroy()
 
     # 한글 폰트 설정
@@ -119,7 +161,7 @@ def make_graph(df, ticker):
     ax1.set_xlabel("년도")  # 수정. x축 label
     ax1.set_ylabel("배당률", color="red")  # 수정. 그래프1 y축 label
     (line1,) = ax1.plot(
-        df.index,
+        df["Year"],
         df["Dividends yield rate"],
         "ro--",
         markersize=4,
@@ -151,7 +193,7 @@ def make_graph(df, ticker):
     ax2 = ax1.twinx()  # 두 번째 y축 생성
     ax2.set_ylabel("배당금", color="blue")  # 수정. 그래프2 y축 label
     line2 = ax2.bar(
-        df.index, df["Dividends"], label=ticker + "_배당금", color="blue"
+        df["Year"], df["Dividends"], label=ticker + "_배당금", color="blue"
     )  # 그래프2 그리기
     ax2.tick_params(axis="y", labelcolor="blue")  # 그래프2 y축 색상 지정
 
@@ -179,7 +221,7 @@ def make_graph(df, ticker):
     plt.title(f"배당률 & 배당금 : {ticker}")  # 수정. 그래프 제목
     fig.tight_layout()  # 레이아웃 조정
 
-    canvas_graph = FigureCanvasTkAgg(fig, frame_2)
+    canvas_graph = FigureCanvasTkAgg(fig, frame_3)
     canvas_graph.get_tk_widget().pack(side=LEFT, fill=BOTH)
 ```
 
@@ -187,7 +229,7 @@ def make_graph(df, ticker):
 ![image](https://github.com/user-attachments/assets/28f6cddb-a836-44bf-85ff-17106d049453)
 
 ```
-def save_graph():  # 그래프 저장
+def save_graph():  # 그래프 저장 위치 정하기
     filename = filedialog.asksaveasfilename(
         initialfile="Untitled.png",
         defaultextension=".png",
@@ -196,7 +238,7 @@ def save_graph():  # 그래프 저장
     plt.savefig(filename)
 
 
-def save_excelfile():  # 엑셀파일 저장
+def save_excelfile():  # 엑셀 파일 저장 위치 정하기
     filename = filedialog.asksaveasfilename(
         initialfile="Untitled.xlsx",
         defaultextension=".xlsx",
@@ -211,22 +253,31 @@ def save_excelfile():  # 엑셀파일 저장
 ```
 # 윈도우 생성
 window = Tk()
-window.title("Dividends Search")  # 윈도우 이름
+window.title("Test Window")  # 윈도우 이름
 window.geometry("1200x600")  # 윈도우 크기
+
+# tkinter 폰트 맑은 고딕으로
+gui_font = font.Font(family="맑은 고딕", size=25)
 
 # 프레임 생성
 frame_1 = Frame(
     master=window, relief=RAISED
 )  # 티커 검색 버튼, 엑셀 저장 버튼, 그래프 저장 버튼 프레임
-frame_2 = Frame(master=window)  # 그래프 출력 프레임
-# frame_3 = Frame(master=window) # 엑셀 파일 저장, 그래프 저장 프레임
+frame_2 = Frame(master=window)  # 마지막 종가 기준 배당률 출력
+frame_3 = Frame(master=window)  # 그래프 출력 프레임
 
 # 레이블 위젯 : 티커를 입력하세요
-label_ticker = Label(master=frame_1, text="Tiker : ", font=("Arial", 25))
+label_ticker = Label(master=frame_1, text="Tiker : ", font=gui_font)
+
+# 레이블 위젯 : 마지막 종가 기준 배당률 출력
+current_dividends_yield_rate = StringVar()
+label_current_dividends_yield_rate = Label(
+    master=frame_2, textvariable=current_dividends_yield_rate, font=gui_font
+)
 
 # 엔트리 위젯 : 티커 입력. 테스트로는 x의 몇 제곱인지
 entry_ticker = Entry(
-    master=frame_1, fg="black", bg="white", width=20, justify=CENTER, font=("Arial", 25)
+    master=frame_1, fg="black", bg="white", width=20, justify=CENTER, font=gui_font
 )
 
 # 버튼 위젯 : 검색, 엑셀 파일 저장, 그래프 저장
@@ -260,19 +311,21 @@ button_download_graph = Button(
     command=save_graph,
 )  # 이미지 저장하는 버튼
 
+
 # 처음에 빈화면 띄워놓기
 fig, ax = plt.subplots(figsize=(8, 6))
-
-canvas_graph = FigureCanvasTkAgg(fig, frame_2)
+canvas_graph = FigureCanvasTkAgg(fig, frame_3)
 canvas_graph.get_tk_widget().pack(side=LEFT, fill=BOTH)
 
+# 프레임 배치
+frame_1.pack()  # 티커 검색, 그래프, 엑셀 저장 버튼
+frame_2.pack()  # 마지막 종가 기준 배당률
+frame_3.pack()  # 역대 배당률, 배당금 시각화
 
-frame_1.pack()
-frame_2.pack()
-# frame_3.pack()
-
-label_ticker.pack(side=LEFT)
-entry_ticker.pack(side=LEFT)
+# 라벨, 엔트리 배치
+label_ticker.pack(side=LEFT)  # 티커 검색 라벨 배치
+entry_ticker.pack(side=LEFT)  # 티커 검색 엔트리 배치
+label_current_dividends_yield_rate.pack(side=LEFT)  # 마지막 종가 기준 배당률 라벨 배치
 
 # 버튼 배치
 button_search.pack(side=LEFT)
@@ -281,3 +334,4 @@ button_download_graph.pack(side=LEFT)
 
 window.mainloop()
 ```
+\- 마지막 종가 기준으로 지난 1년간 배당률 계산하는 라벨을 추가했다.
