@@ -103,9 +103,8 @@ def scraping_stock_data():
     df_merged = df_merged.reset_index()  # 인덱스 초기화
     df_savefile = df_stockdata  # 저장할 데이터프레임 만들어 주기
     df_savefile["Date"] = (
-        df_savefile["Date"].astype("str").str.split("-").str[0]
+        df_savefile["Date"].astype("str").str.split().str[0]
     )  # 타임존은 엑셀로 저장이 안 된다.
-
     make_graph(df_merged, ticker)
 
     ### 현재 종가 기준 배당률 구하기
