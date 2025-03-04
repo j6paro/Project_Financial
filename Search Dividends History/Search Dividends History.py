@@ -191,7 +191,7 @@ def save_excelfile():  # 엑셀 파일 저장 위치 정하기
 
 # 윈도우 생성
 window = Tk()
-window.title("Test Window")  # 윈도우 이름
+window.title("Search Dividends History")  # 윈도우 이름
 window.geometry("1200x600")  # 윈도우 크기
 
 # tkinter 폰트 맑은 고딕으로
