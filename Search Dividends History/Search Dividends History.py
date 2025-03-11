@@ -71,10 +71,10 @@ def scraping_stock_data():
             str(now.year - 1) + "-" + str(now.month + 1).zfill(2) + "-01"
         )  # 시작일을 11개월 전 1일로
         df_trailing_dividends = df_preprocessing[
-            df_preprocessing["Date"].bewteen(start_date, now_transform)
+            df_preprocessing["Date"].between(start_date, now_transform)
         ]  # 최근 1년 데이터프레임
         trailing_dividends_yield_rate = (
-            df_trailing_dividends["Dividends"].sum / price_last_close
+            df_trailing_dividends["Dividends"].sum() / price_last_close
         ) * 100  # 최근 1년 배당률 구하기
     else:
         start_date = (
